@@ -1,0 +1,30 @@
+# Publication automatique Suivi MVE / Qualité MVE (générée par « node publier.js --installer-nuage »)
+name: Publication Suivi MVE
+on:
+  schedule:
+    - cron: '7,37 * * * *'   # toutes les 30 minutes (à h07 et h37, pour éviter l'encombrement de l'heure pile)
+  workflow_dispatch: {}       # bouton « Run workflow » pour publier à la demande
+permissions:
+  contents: write
+  pages: read
+concurrency:
+  group: publication-mve
+  cancel-in-progress: false
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Africa/Lubumbashi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Lecture de DHIS2 et publication
+        run: node ordinateur/publier.js
+        env:
+          MVE_MOT_DE_PASSE: ${{ secrets.MVE_MOT_DE_PASSE }}
+          MVE_DHIS2_JETON: ${{ secrets.MVE_DHIS2_JETON }}
+          MVE_GITHUB_JETON: ${{ secrets.MVE_GITHUB_JETON }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,18 @@
+{
+  "name": "Qualité des données MVE Haut-Uélé",
+  "short_name": "Qualité MVE",
+  "description": "Contrôles de qualité des données MVE (complétude, incohérences, doublons, retards), calculés sur le téléphone.",
+  "lang": "fr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#173f3a",
+  "theme_color": "#173f3a",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

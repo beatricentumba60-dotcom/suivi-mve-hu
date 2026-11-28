@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tableaux de bord MVE</title>
+<link rel="icon" href="../icons/icon-192.png">
+<style>
+  :root {
+    --ink: #12324a; --bg: #f3f5f7; --panel: #fff; --line: #dde3e9; --fg: #16212b; --muted: #5d6b78;
+    --ok: #23804f; --ok-bg: #e3f3ea; --bad: #c8312d; --bad-bg: #fbe5e4; --btn: #1d4a6b;
+    --radius: 12px; font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1820; --panel: #17232e; --line: #2a3a48; --fg: #e6edf3; --muted: #9aabb9; --ok: #5cc48d; --ok-bg: #173a29; --bad: #ff7a72; --bad-bg: #44201f; --btn: #2f6f9f; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-size: 15px; line-height: 1.45; }
+  header { background: var(--ink); color: #fff; padding: 22px 24px 20px; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -.01em; }
+  header p { margin: 4px 0 0; color: rgba(255,255,255,.78); font-size: 14px; }
+  main { max-width: 1120px; margin: 0 auto; padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 18px; }
+  .dossier { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  .dossier .k { font-size: 12.5px; color: var(--muted); }
+  .dossier .chemin { font-family: Consolas, ui-monospace, monospace; font-size: 13.5px; word-break: break-all; }
+  .dossier .grow { flex: 1 1 320px; min-width: 0; }
+  .btn { appearance: none; border: 0; border-radius: 8px; background: var(--btn); color: #fff; font: inherit; font-size: 14px; font-weight: 600; padding: 9px 14px; cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  .btn:focus-visible, input:focus-visible { outline: 3px solid #7fb3dd; outline-offset: 2px; }
+  form.changer { display: none; width: 100%; gap: 8px; }
+  form.changer.ouvert { display: flex; flex-wrap: wrap; }
+  form.changer input { flex: 1 1 360px; min-width: 0; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); }
+  .msg { width: 100%; font-size: 13px; color: var(--bad); min-height: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .card .tete { display: flex; gap: 12px; align-items: center; }
+  .card img { width: 52px; height: 52px; border-radius: 12px; flex: none; }
+  .card h2 { margin: 0; font-size: 17px; }
+  .card .desc { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .etat { font-size: 13px; border-radius: 8px; padding: 8px 10px; }
+  .etat.ok { background: var(--ok-bg); color: var(--ok); }
+  .etat.ko { background: var(--bad-bg); color: var(--bad); }
+  .etat b { display: block; font-weight: 600; word-break: break-all; }
+  .card .actions { margin-top: auto; }
+  .card .btn[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+  .aide { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 18px; font-size: 14px; }
+  .aide h3 { margin: 0 0 6px; font-size: 15px; }
+  .aide ol { margin: 0; padding-left: 20px; }
+  .aide li { margin: 3px 0; }
+  .hors { max-width: 640px; margin: 40px auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  @media (max-width: 560px) { header, main { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tableaux de bord MVE – Haut-Uélé</h1>
+  <p>Les tableaux de bord, calculés sur cet ordinateur à partir des classeurs Excel actualisés depuis DHIS2.</p>
+</header>
+<main id="main">
+  <section class="dossier" aria-label="Dossier des classeurs">
+    <div class="grow">
+      <div class="k">Dossier des classeurs Excel</div>
+      <div class="chemin" id="chemin">…</div>
+    </div>
+    <button class="btn ghost" id="b-ouvrir" type="button">Ouvrir le dossier</button>
+    <button class="btn ghost" id="b-changer" type="button">Changer de dossier</button>
+    <form class="changer" id="f-changer">
+      <input id="i-chemin" type="text" placeholder="Collez le chemin du dossier, ex. C:\Users\user\Documents\Tableaux MVE" aria-label="Chemin du dossier des classeurs" spellcheck="false" autocomplete="off">
+      <button class="btn" type="submit">Enregistrer</button>
+      <div class="msg" id="msg" role="alert"></div>
+    </form>
+  </section>
+  <section class="grid" id="cartes" aria-label="Tableaux de bord"></section>
+  <section class="aide">
+    <h3>Mettre les tableaux de bord à jour</h3>
+    <ol>
+      <li>Ouvrez le classeur dans Excel, puis <b>Données › Actualiser tout</b>.</li>
+      <li><b>Enregistrez</b> le classeur (Ctrl+S) dans le dossier ci-dessus.</li>
+      <li>Le tableau de bord se recharge tout seul dans la minute (ou dès que vous revenez sur sa fenêtre).</li>
+    </ol>
+    <p style="margin:8px 0 0;color:var(--muted);font-size:13px">Les fichiers sont reconnus par leur nom : « Tableau_de_bord_MVE », « …Qualite_Donnees_MVE », « …Vaccination… », « …Contacts… » et « …Qualite_Donnees_Contacts… ». Si plusieurs fichiers du même type sont présents, le plus récent est utilisé. Aucune donnée ne quitte l’ordinateur.</p>
+  </section>
+</main>
+<script>
+(function () {
+  'use strict';
+  var APPS = [
+    ['suivi', 'Suivi MVE', '../', '../icons/icon-192.png', 'Situation épidémiologique : alertes, cas confirmés et probables, décès, courbe et carte par zone.'],
+    ['qualite', 'Qualité MVE', '../qualite/', '../qualite/icons/icon-192.png', 'Qualité des données des alertes : complétude, cohérence, retards de traitement, alertes à corriger.'],
+    ['vaccination', 'Vaccination MVE', '../vaccination/', '../vaccination/icons/icon-192.png', 'Registre de vaccination : vaccinés, MAPI, protocole, qualité des fiches et doublons.'],
+    ['contacts', 'Contacts MVE', '../contacts/', '../contacts/icons/icon-192.png', 'Suivi des contacts : à suivre, vus, taux de suivi, analyse 21 jours, contacts à relancer.'],
+    ['qualite-contacts', 'Qualité Contacts MVE', '../qualite-contacts/', '../qualite-contacts/icons/icon-192.png', 'Qualité des données des contacts : variables, fiches de suivi, retards de saisie, à corriger.'],
+    ['chaines', 'Chaînes de transmission', '../chaines/', '../chaines/icone-192.png', 'Cas sources, contacts et cas secondaires reliés, schéma de chaque chaîne, liens à valider et lacunes.', ['qualite', 'contacts']]
+  ];
+  var $ = function (s) { return document.querySelector(s); };
+  var fdate = function (ms) { return new Date(ms).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }); };
+  var taille = function (o) { return o < 1048576 ? Math.round(o / 1024) + ' Ko' : (o / 1048576).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' Mo'; };
+  function rendre(e) {
+    $('#chemin').textContent = e.dossier + (e.existe ? '' : ' (introuvable)');
+    var host = $('#cartes');
+    host.replaceChildren.apply(host, APPS.map(function (a) {
+      var c = a[5] ? (a[5].every(function (t) { return e.classeurs[t]; }) ? { nom: a[5].map(function (t) { return e.classeurs[t].nom; }).join(' + '), mtime: Math.max.apply(null, a[5].map(function (t) { return e.classeurs[t].mtime; })), taille: a[5].reduce(function (s, t) { return s + e.classeurs[t].taille; }, 0) } : null) : e.classeurs[a[0]];
+      var card = document.createElement('article'); card.className = 'card';
+      var tete = document.createElement('div'); tete.className = 'tete';
+      var img = document.createElement('img'); img.src = a[3]; img.alt = '';
+      var t = document.createElement('div'), h = document.createElement('h2'); h.textContent = a[1];
+      var d = document.createElement('p'); d.className = 'desc'; d.textContent = a[4];
+      t.append(h, d); tete.append(img, t);
+      var et = document.createElement('div'); et.className = 'etat ' + (c ? 'ok' : 'ko');
+      if (c) { var b = document.createElement('b'); b.textContent = c.nom; et.append(b, 'Enregistré le ' + fdate(c.mtime) + ' · ' + taille(c.taille)); }
+      else et.textContent = a[5] ? 'Il faut les classeurs « Qualité des données MVE » et « Contacts MVE ».' : 'Aucun classeur trouvé dans le dossier.';
+      var act = document.createElement('div'); act.className = 'actions';
+      var o = document.createElement('a'); o.className = 'btn'; o.href = a[2]; o.textContent = 'Ouvrir ' + a[1];
+      if (!c) o.setAttribute('aria-disabled', 'true');
+      act.appendChild(o); card.append(tete, et, act); return card;
+    }));
+  }
+  function charger() {
+    return fetch('/bureau/etat', { cache: 'no-store' }).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(rendre).catch(function () {
+      $('#main').innerHTML = '<div class="hors"><h2>Programme arrêté</h2><p>Relancez « Tableaux de bord MVE » depuis le raccourci du bureau.</p></div>';
+    });
+  }
+  $('#b-ouvrir').addEventListener('click', function () { fetch('/bureau/ouvrir-dossier', { method: 'POST' }); });
+  $('#b-changer').addEventListener('click', function () { var f = $('#f-changer'); f.classList.toggle('ouvert'); if (f.classList.contains('ouvert')) { $('#i-chemin').value = $('#chemin').textContent.replace(/ \(introuvable\)$/, ''); $('#i-chemin').focus(); $('#i-chemin').select(); } });
+  $('#f-changer').addEventListener('submit', function (ev) {
+    ev.preventDefault(); $('#msg').textContent = '';
+    fetch('/bureau/dossier', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chemin: $('#i-chemin').value }) })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.erreur); return j; }); })
+      .then(function (e) { $('#f-changer').classList.remove('ouvert'); rendre(e); })
+      .catch(function (e) { $('#msg').textContent = e.message; });
+  });
+  charger();
+  setInterval(charger, 30000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') charger(); });
+})();
+</script>
+</body>
+</html>

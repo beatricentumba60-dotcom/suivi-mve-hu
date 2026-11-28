@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Suivi MVE Haut-Uélé</title>
+<meta name="description" content="Tableau de bord épidémiologique MVE calculé sur le téléphone à partir du fichier Excel DHIS2.">
+<meta name="theme-color" content="#12324a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  /* Mise en page : en-tête fixe (données + filtres), contenu par onglets, barre d'onglets en bas (usage au pouce). */
+  :root {
+    --ink: #12324a;          /* bleu nuit de l'en-tête */
+    --ink-2: #1d4a6b;
+    --bg: #f3f5f7;
+    --panel: #ffffff;
+    --line: #dde3e9;
+    --fg: #16212b;
+    --muted: #5d6b78;
+    --conf: #c8312d;         /* cas confirmés */
+    --prob: #e3a12f;         /* cas probables */
+    --dec: #3b4148;          /* décès */
+    --alert: #a9bccd;        /* alertes */
+    --men: #2f6f9f;
+    --women: #c0587e;
+    --ok: #23804f;
+    --warn: #b97700;
+    --bad: #c8312d;
+    --ok-bg: #e3f3ea;
+    --warn-bg: #fdf1d8;
+    --bad-bg: #fbe5e4;
+    --c0: #eef1f4; --c1: #fbe3d6; --c2: #f4b393; --c3: #e3744f; --c4: #b8322a;
+    --radius: 12px;
+    --font: Roboto, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --num: "Roboto Condensed", Roboto, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1820; --panel: #17232e; --line: #26364430; --fg: #e7edf2; --muted: #9aabb9;
+      --dec: #cfd6dc; --alert: #4d6478; --line: #2a3a48;
+      --ok-bg: #173a29; --warn-bg: #3d2f12; --bad-bg: #44201f; --ok: #5cc48d; --warn: #f0b84a; --bad: #ff7a72;
+      --c0: #22313d; --c1: #4a2f28; --c2: #7a3d2b; --c3: #b24f33; --c4: #e0533f;
+      --nd: #3a4a58;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.4;
+    -webkit-tap-highlight-color: transparent; }
+  button, input, select { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  .top { position: sticky; top: 0; z-index: 20; background: var(--ink); color: #fff;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); }
+  .top-row { display: flex; align-items: center; gap: 10px; }
+  .top h1 { font-size: 17px; font-weight: 600; margin: 0; flex: 1; min-width: 0; letter-spacing: .01em; }
+  .top .src { font-size: 12px; opacity: .78; margin: 2px 0 0; }
+  .top .src.stale { opacity: 1; color: #ffd27a; }
+  .top .src.stale::after { content: " · données de plus de 2 jours"; }
+  .icon-btn.spin svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pw-msg { min-height: 1.4em; font-size: 13px; color: var(--bad); margin: -4px 0 10px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: -4px 0 14px; color: var(--muted); }
+  .icon-btn { background: transparent; border: 0; color: #fff; width: 40px; height: 40px; border-radius: 20px; display: grid; place-items: center; cursor: pointer; }
+  .icon-btn:active { background: rgba(255,255,255,.12); }
+  .chips { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.08); color: #fff; border-radius: 16px;
+    padding: 5px 11px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+  .chip b { font-weight: 600; }
+
+  main { padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(84px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    max-width: 980px; margin: 0 auto; }
+  .tab { display: flex; flex-direction: column; gap: 18px; }
+  h2 { font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+  .sub { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px; }
+  .lede { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0; line-height: 1.5; }
+  .lede b { font-variant-numeric: tabular-nums; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; text-align: left;
+    cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; position: relative; }
+  .tile:active { transform: scale(.985); }
+  .tile .lab { font-size: 12.5px; color: var(--muted); line-height: 1.25; }
+  .tile .val { font-family: var(--num); font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .tile .note { font-size: 11.5px; color: var(--muted); }
+  .tile.hero { grid-column: span 2; background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tile.hero .lab, .tile.hero .note { color: rgba(255,255,255,.78); }
+  .tile.hero .val { font-size: 38px; }
+  .tile .tag { position: absolute; top: 10px; right: 10px; width: 8px; height: 8px; border-radius: 4px; }
+  .tile.s-bad { background: var(--bad-bg); border-color: transparent; } .tile.s-bad .val { color: var(--bad); }
+  .tile.s-warn { background: var(--warn-bg); border-color: transparent; } .tile.s-warn .val { color: var(--warn); }
+  .tile.s-ok { background: var(--ok-bg); border-color: transparent; } .tile.s-ok .val { color: var(--ok); }
+  .tile.k-conf .tag { background: var(--conf); } .tile.k-prob .tag { background: var(--prob); } .tile.k-dec .tag { background: var(--dec); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; min-width: 0; }
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { fill: var(--muted); font-size: 11px; font-family: var(--font); }
+  .chart .vlab { fill: var(--fg); font-variant-numeric: tabular-nums; }
+  .chart .grid line { stroke: var(--line); }
+  .chart .axis line, .chart .axis path { stroke: var(--line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .tip { position: absolute; z-index: 5; pointer-events: none; background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    box-shadow: 0 6px 18px rgba(0,0,0,.16); border-radius: 8px; padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+  .tip b { display: block; margin-bottom: 2px; }
+  .chart-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  .tile.txt .val { font-size: 17px; line-height: 1.3; font-family: inherit; }
+  .progress { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; margin: 10px 0 2px; }
+  .progress i { display: block; height: 100%; background: var(--ok); border-radius: 5px; }
+  details.methode summary { font-weight: 600; cursor: pointer; }
+  details.methode p { font-size: 13px; color: var(--muted); margin: 8px 0 0; text-align: justify; }
+  .lect { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .lect.good { background: var(--ok-bg); color: var(--ok); } .lect.bad { background: var(--bad-bg); color: var(--bad); } .lect.mid { background: var(--warn-bg); color: var(--warn); }
+  @media (max-width: 420px) { .tabs button { font-size: 10.5px; } }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); background: var(--panel); padding: 8px 10px; border-bottom: 1px solid var(--line);
+    white-space: nowrap; position: sticky; top: 0; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.first, th.first { position: sticky; left: 0; background: var(--panel); z-index: 1; }
+  tr.active td { background: var(--bad-bg); } tr.active td.first { background: var(--bad-bg); }
+  tr.total td { font-weight: 600; background: var(--bg); } tr.total td.first { background: var(--bg); }
+  .pill { display: inline-block; min-width: 34px; text-align: center; border-radius: 10px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.warn { background: var(--warn-bg); color: var(--warn); } .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0,0,0,.08); }
+  .cls0 { background: var(--c0); } .cls1 { background: var(--c1); } .cls2 { background: var(--c2); } .cls3 { background: var(--c3); } .cls4 { background: var(--c4); }
+  .classes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-top: 10px; font-size: 12.5px; }
+  .classes div { display: flex; align-items: center; gap: 4px; }
+
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--panel); border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    padding: 4px max(8px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
+  .tabs button { background: none; border: 0; padding: 6px 1px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 11.5px; color: var(--muted); cursor: pointer; border-radius: 10px; }
+  .tabs button svg { width: 22px; height: 22px; }
+  .tabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .tabs button[aria-selected="true"] { color: #8cc2ea; } }
+
+  .sheet-bg { position: fixed; inset: 0; background: rgba(8,16,24,.45); z-index: 40; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; background: var(--panel); border-radius: 16px 16px 0 0;
+    padding: 8px max(18px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+    max-height: 88vh; overflow-y: auto; max-width: 640px; margin: 0 auto; box-shadow: 0 -8px 30px rgba(0,0,0,.2); }
+  .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 12px; }
+  .sheet h3 { margin: 0 0 12px; font-size: 17px; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .field label { font-size: 12.5px; color: var(--muted); }
+  .field select, .field input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-height: 44px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .quick { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 12px; }
+  .quick button { border: 1px solid var(--line); background: var(--bg); border-radius: 16px; padding: 5px 11px; font-size: 13px; cursor: pointer; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 18px; border-radius: 12px; border: 0;
+    background: var(--ink); color: #fff; font-weight: 600; cursor: pointer; width: 100%; }
+  @media (prefers-color-scheme: dark) { .btn { background: #2b6a96; } }
+  a.btn { text-decoration: none; }
+  .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  .btn.danger { background: transparent; color: var(--bad); border: 1px solid var(--line); }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .warn-line { font-size: 12.5px; color: var(--warn); margin: -6px 0 10px; }
+  .def p { margin: 0 0 10px; line-height: 1.5; } .def .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+  .def .big { font-family: var(--num); font-size: 30px; font-weight: 600; margin-bottom: 10px; }
+
+  .empty { max-width: 520px; margin: 8vh auto 0; text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+  .empty img { width: 84px; height: 84px; border-radius: 20px; }
+  .empty h2 { font-size: 20px; margin: 0; }
+  .empty p { margin: 0; color: var(--muted); line-height: 1.5; }
+  .empty .priv { font-size: 12.5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; text-align: left; }
+  .busy { position: fixed; inset: 0; z-index: 60; background: rgba(8,16,24,.55); display: grid; place-items: center; color: #fff; font-weight: 600; }
+  .busy div { background: var(--ink); padding: 16px 20px; border-radius: 12px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom, 0px)); z-index: 50;
+    background: #1b2731; color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+  .help ol { padding-left: 20px; margin: 6px 0 12px; } .help li { margin-bottom: 6px; line-height: 1.45; }
+  .help h4 { margin: 14px 0 4px; font-size: 14px; }
+  @media (min-width: 720px) { .tile.hero { grid-column: span 2; } main { padding-top: 20px; } }
+  @media (prefers-reduced-motion: no-preference) { .sheet { animation: up .18s ease-out; } @keyframes up { from { transform: translateY(24px); opacity: .6; } } }
+  :focus-visible { outline: 3px solid #5aa9e6; outline-offset: 2px; }
+  /* Carte des aires de santé */
+  :root { --nd: #c3cad1; }
+  .seg { display: flex; gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 3px; margin: 0 0 10px; overflow-x: auto; scrollbar-width: none; }
+  .seg::-webkit-scrollbar { display: none; }
+  .seg button { flex: 1 0 auto; border: 0; background: transparent; border-radius: 8px; padding: 7px 8px; font-size: 13px; color: var(--muted); cursor: pointer; white-space: nowrap; min-height: 36px; }
+  .seg button[aria-pressed="true"] { background: var(--panel); color: var(--fg); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .carte svg { display: block; width: 100%; height: auto; }
+  .carte .aire { stroke: var(--panel); stroke-width: .6; cursor: pointer; }
+  .carte .aire:hover { opacity: .85; }
+  .carte .zone { fill: none; stroke: var(--fg); stroke-width: 1.3; stroke-opacity: .55; pointer-events: none; }
+  .carte .aire-sel { fill: none; stroke: var(--fg); stroke-width: 2.6; pointer-events: none; }
+  .carte .zlab { fill: var(--fg); font-size: 11px; font-weight: 600; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round; }
+  .carte-info { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg); font-size: 13.5px; line-height: 1.5; }
+  .carte-info b.t { display: block; font-size: 14.5px; margin-bottom: 2px; }
+  .carte-info .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 14px; }
+  .carte-info .kv span { color: var(--muted); }
+  .carte-info button { margin-top: 8px; border: 1px solid var(--line); background: var(--panel); border-radius: 16px; padding: 5px 12px; font-size: 13px; cursor: pointer; }
+  :root { --past: #b9c6d2; }
+  @media (prefers-color-scheme: dark) { :root { --past: #4b5d6d; } }
+  .carte .foyer { fill: none; stroke: var(--fg); stroke-width: 2.2; stroke-linejoin: round; pointer-events: none; }
+  .carte .foyer2 { fill: none; stroke: var(--fg); stroke-width: 1.6; stroke-dasharray: 4 2; pointer-events: none; }
+  .carte .flab { fill: var(--fg); font-size: 13px; font-weight: 700; pointer-events: none; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; stroke-linejoin: round; }
+  .prop-ctl { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+  .prop-ctl input[type=range] { flex: 1; min-width: 0; accent-color: var(--conf); height: 32px; }
+  .prop-lab { font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 92px; text-align: right; }
+  .play { flex: none; width: 40px; height: 40px; border-radius: 20px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); display: grid; place-items: center; cursor: pointer; }
+  .h3 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; }
+  .foyers { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .foyer-c { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 13.5px; line-height: 1.45; cursor: pointer; background: var(--panel); }
+  .foyer-c b.t { font-size: 14.5px; }
+  .foyer-c .m { color: var(--muted); }
+  .foyer-c.sel { border-color: var(--fg); }
+  .tile.flat { cursor: default; } .tile.flat:active { transform: none; }
+  .tile.st-active .tag { background: var(--bad); } .tile.st-surveillance .tag { background: var(--warn); } .tile.st-calme .tag { background: var(--ok); } .tile.st-jamais .tag { background: var(--c0); border: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-row">
+    <h1>Suivi MVE · Haut-Uélé</h1>
+    <button class="icon-btn" id="btn-sync" aria-label="Actualiser les données" hidden>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-menu" aria-label="Menu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></svg>
+    </button>
+  </div>
+  <p class="src" id="src">Aucune donnée chargée</p>
+  <div class="chips" id="chips" hidden></div>
+</header>
+
+<main>
+  <section class="empty" id="empty">
+    <img src="icons/icon-192.png" alt="">
+    <h2>Recevez le tableau de bord MVE</h2>
+    <p>Saisissez le mot de passe d'équipe pour recevoir automatiquement les données publiées depuis l'ordinateur. Vous pouvez aussi ouvrir directement le classeur Excel actualisé.</p>
+    <button class="btn" id="btn-auto-empty" style="max-width:320px">Activer la mise à jour automatique</button>
+    <button class="btn ghost" id="btn-open-empty" style="max-width:320px">Ouvrir un fichier Excel</button>
+    <p class="priv"><b>Confidentialité :</b> les données publiées sont chiffrées : sans le mot de passe d'équipe, elles sont illisibles. Les calculs se font sur ce téléphone. La dernière liste chargée reste sur le téléphone jusqu'à ce que vous l'effaciez depuis le menu.</p>
+  </section>
+
+  <section class="tab" id="tab-synthese" hidden>
+    <p class="lede" id="lede"></p>
+    <div>
+      <h2>Cas</h2>
+      <div class="grid" id="tiles-cas"></div>
+    </div>
+    <div>
+      <h2>Alertes et laboratoire</h2>
+      <div class="grid" id="tiles-alertes"></div>
+    </div>
+    <div>
+      <h2>Groupes particuliers</h2>
+      <div class="grid" id="tiles-groupes"></div>
+    </div>
+    <p class="chart-note">Touchez un indicateur pour lire sa définition.</p>
+  </section>
+
+  <section class="tab" id="tab-courbes" hidden>
+    <div class="card">
+      <h2>Courbe épidémique</h2>
+      <p class="sub">Cas par semaine de début des symptômes (date de notification si absente).</p>
+      <div class="chart" id="ch-courbe"></div>
+      <div class="legend"><span><i style="background:var(--conf)"></i>Confirmés</span><span><i style="background:var(--prob)"></i>Probables</span></div>
+      <p class="chart-note">Les deux dernières semaines sont incomplètes (délai de notification) : ne pas les lire comme une baisse.</p>
+    </div>
+    <div class="card">
+      <h2>Cas par semaine de notification</h2>
+      <p class="sub">Même base que l'indicateur « Cas » de la période.</p>
+      <div class="chart" id="ch-notif"></div>
+      <div class="legend"><span><i style="background:var(--conf)"></i>Confirmés</span><span><i style="background:var(--prob)"></i>Probables</span></div>
+    </div>
+    <div class="card">
+      <h2>30 derniers jours</h2>
+      <p class="sub" id="sub-jours">Par jour de notification, jusqu'à la date de référence.</p>
+      <div class="chart" id="ch-jours"></div>
+      <div class="legend"><span><i style="background:var(--alert)"></i>Alertes</span><span><i style="background:var(--conf)"></i>Cas confirmés</span><span><i style="background:var(--dec)"></i>Décès (cas)</span></div>
+    </div>
+    <div class="card">
+      <h2>Cas par tranche d'âge et sexe</h2>
+      <div class="chart" id="ch-age"></div>
+      <div class="legend"><span><i style="background:var(--men)"></i>Hommes</span><span><i style="background:var(--women)"></i>Femmes</span></div>
+      <p class="chart-note" id="age-note" hidden></p>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-carte" hidden>
+    <div class="card" id="card-carte">
+      <h2 id="carte-titre">Carte des aires de santé</h2>
+      <p class="sub" id="carte-sub"></p>
+      <div class="seg" id="seg-carte">
+        <button type="button" data-ind="conf" aria-pressed="true">Confirmés</button>
+        <button type="button" data-ind="taux" aria-pressed="false">Taux d’attaque</button>
+        <button type="button" data-ind="dec" aria-pressed="false">Décès</button>
+        <button type="button" data-ind="statut" aria-pressed="false">Statut</button>
+      </div>
+      <div class="chart carte" id="ch-carte"></div>
+      <div class="legend" id="leg-carte"></div>
+      <div class="carte-info" id="info-carte"></div>
+      <p class="chart-note" id="note-carte"></p>
+    </div>
+    <div>
+      <h2>Aires actives</h2>
+      <p class="sub" id="aires-sub">Statut selon les jours écoulés depuis le dernier cas confirmé, à la date de référence.</p>
+      <div class="grid" id="tiles-aires"></div>
+    </div>
+    <div>
+      <h2>Aires touchées</h2>
+      <p class="sub">Aires actives et sous surveillance, de la plus récente à la plus ancienne. Touchez une aire pour la voir sur la carte.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th class="first">Aire</th><th>Zone</th><th class="n">Cas</th><th class="n">Confirmés</th><th class="n">Décès</th>
+            <th class="n">Taux / 100 000</th><th>Dernier confirmé</th><th class="n">Jours depuis</th>
+          </tr></thead>
+          <tbody id="tb-aires"></tbody>
+        </table>
+      </div>
+      <button type="button" class="btn ghost" id="btn-aires" style="margin-top:8px" hidden></button>
+      <p class="chart-note">Cas, confirmés, décès et taux : période choisie. Jours depuis : rouge &lt; 21 j (transmission possible), jaune 21 à 41 j, vert ≥ 42 j (critère OMS de fin de transmission).</p>
+    </div>
+    <div class="card" id="card-prop">
+      <h2 id="prop-titre">Propagation semaine par semaine</h2>
+      <p class="sub" id="prop-sub">État de chaque aire à la fin de la semaine choisie (cas confirmés, date de notification).</p>
+      <div class="prop-ctl">
+        <button type="button" class="play" id="prop-play" aria-label="Lancer l’animation">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path id="prop-play-ico" d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>
+        </button>
+        <input type="range" id="prop-w" min="0" max="0" value="0" aria-label="Semaine">
+        <span class="prop-lab" id="prop-lab"></span>
+      </div>
+      <div class="chart carte" id="ch-prop"></div>
+      <div class="legend" id="leg-prop"></div>
+      <p class="carte-info" id="prop-txt"></p>
+      <h3 class="h3">Extension géographique par semaine</h3>
+      <div class="chart" id="ch-prop-serie"></div>
+      <div class="legend"><span><i style="background:var(--c4)"></i>Aires touchées pour la 1re fois</span><span><i style="background:var(--ink-2)"></i>Aires avec des cas dans la semaine</span></div>
+      <p class="chart-note">Une hausse des nouvelles aires touchées signale une extension géographique ; des cas dans les mêmes aires signalent une transmission locale. Touchez une barre pour afficher la semaine sur la carte.</p>
+    </div>
+    <div class="card" id="card-foyers">
+      <h2>Foyers de cas</h2>
+      <p class="sub" id="foy-sub">Groupes d’aires voisines où les cas confirmés sont nettement plus nombreux qu’attendu au vu de leur population.</p>
+      <div class="seg" id="seg-foyers">
+        <button type="button" data-fen="21" aria-pressed="true">21 jours</button>
+        <button type="button" data-fen="42" aria-pressed="false">42 jours</button>
+        <button type="button" data-fen="periode" aria-pressed="false">Période des filtres</button>
+      </div>
+      <div class="chart carte" id="ch-foyers"></div>
+      <div class="legend" id="leg-foyers"></div>
+      <div class="foyers" id="liste-foyers"></div>
+      <p class="chart-note" id="foy-note"></p>
+    </div>
+  </section>
+  <section class="tab" id="tab-tendance" hidden>
+    <p class="lede" id="td-lede"></p>
+    <div class="card">
+      <h2>Transmission actuelle (Rt)</h2>
+      <p class="sub" id="td-sub"></p>
+      <div class="grid" id="tiles-rt"></div>
+      <div class="chart" id="ch-rt"></div>
+      <div class="legend"><span><i style="background:var(--conf)"></i>Rt (moyenne)</span><span><i style="background:var(--conf);opacity:.25"></i>Intervalle de crédibilité 95 %</span><span><i style="background:var(--muted)"></i>Seuil Rt = 1</span></div>
+      <p class="chart-note">Rt = nombre moyen de personnes infectées par chaque cas. Au-dessus de 1, l’épidémie progresse ; en dessous, elle recule. Points masqués quand la fenêtre de 14 jours compte moins de 6 cas.</p>
+    </div>
+    <div class="card">
+      <h2>Projection des cas</h2>
+      <p class="sub" id="td-proj-sub"></p>
+      <div class="grid" id="tiles-proj"></div>
+      <div class="chart" id="ch-proj"></div>
+      <div class="legend"><span><i style="background:var(--conf)"></i>Cas observés</span><span><i style="background:var(--prob)"></i>Projection (médiane)</span><span><i style="background:var(--prob);opacity:.35"></i>Intervalle 50 %</span><span><i style="background:var(--muted)"></i>Intervalle 95 %</span></div>
+      <p class="chart-note">Par semaine de début des symptômes (lundi–dimanche). Les semaines récentes sont complétées par la projection, car leurs cas ne sont pas encore tous notifiés. Fiable à court terme seulement : la projection suppose que Rt reste inchangé.</p>
+    </div>
+    <div class="card">
+      <h2>Vers la fin de l’épidémie</h2>
+      <p class="sub" id="td-fin-sub"></p>
+      <div class="grid" id="tiles-fin"></div>
+      <div class="progress" id="td-progress"><i></i></div>
+      <p class="chart-note">Critère de l’OMS : 42 jours (deux périodes d’incubation maximales) sans nouveau cas confirmé. L’OMS compte à partir du 2e test négatif ou de l’inhumation du dernier cas ; l’application compte, par approximation, à partir de la notification du dernier cas confirmé.</p>
+    </div>
+    <div>
+      <h2>Rt par zone de santé</h2>
+      <p class="sub">Toutes les zones, à la même date d’estimation. Chaque zone est estimée avec ses seuls cas (les cas importés d’une autre zone sont comptés comme locaux). Touchez une zone pour la filtrer.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th class="first">Zone</th><th class="n">Cas 14 j</th><th class="n">Rt</th><th class="n">IC 95 %</th><th class="n">P(Rt &gt; 1)</th><th>Lecture</th></tr></thead>
+          <tbody id="tb-rt"></tbody>
+        </table>
+      </div>
+    </div>
+    <details class="card methode">
+      <summary>Méthode et limites</summary>
+      <p><b>Rt</b> : méthode de Cori et al. (2013), celle du package EpiEstim utilisé par l’OMS. Cas confirmés et probables par date de début des symptômes (date de notification si absente). Intervalle sériel d’Ebola : moyenne 15,3 jours, écart-type 9,3 jours (WHO Ebola Response Team, 2014). Fenêtre glissante de 14 jours ; a priori gamma de moyenne 5.</p>
+      <p><b>Jours récents</b> : un cas est notifié plusieurs jours après le début de ses symptômes ; les derniers jours sont donc incomplets et feraient croire à une baisse. L’estimation s’arrête à la date de référence moins le délai de notification observé (3e quartile, entre 3 et 14 jours).</p>
+      <p><b>Projection</b> : 1 000 simulations d’un processus de branchement de Poisson, avec un Rt tiré dans sa loi a posteriori et supposé constant. Elle ne prévoit ni l’effet de nouvelles mesures ni l’arrivée de cas d’ailleurs.</p>
+      <p><b>Limites</b> : les cas probables sans date fiable, les retards de saisie et une détection incomplète faussent l’estimation. Avec peu de cas, les intervalles sont larges : lire la tendance plutôt que le chiffre exact.</p>
+    </details>
+  </section>
+
+  <section class="tab" id="tab-zones" hidden>
+    <div class="card">
+      <h2 id="lieu-title">Cas et décès par zone de santé</h2>
+      <p class="sub">Sur la période choisie, triés par nombre de cas.</p>
+      <div class="chart" id="ch-lieu"></div>
+      <div class="legend"><span><i style="background:var(--conf)"></i>Cas</span><span><i style="background:var(--dec)"></i>Décès</span></div>
+    </div>
+    <div>
+      <h2>Situation par zone de santé</h2>
+      <p class="sub">Toutes les zones, quel que soit le filtre zone. Fond rose : au moins un cas dans les 7 derniers jours. Touchez une zone pour la filtrer.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th class="first">Zone</th><th class="n">Cas</th><th class="n">Confirmés</th><th class="n">Décès</th><th class="n">Létalité</th>
+            <th class="n">Cas 7 j</th><th class="n">Cas jour réf.</th><th class="n">Alertes 7 j</th><th class="n">Validées non classées</th>
+            <th>Dernier confirmé</th><th class="n">Jours depuis</th>
+          </tr></thead>
+          <tbody id="tb-zones"></tbody>
+        </table>
+      </div>
+      <p class="chart-note">Jours depuis le dernier cas confirmé : rouge &lt; 21 j (transmission possible), jaune 21 à 41 j, vert ≥ 42 j (critère de fin de transmission).</p>
+    </div>
+    <div class="card">
+      <h2>Classes de cas confirmés par zone</h2>
+      <p class="sub">Période choisie. Remplace la carte du classeur Excel.</p>
+      <div class="classes" id="classes"></div>
+    </div>
+  </section>
+
+  <section class="tab" id="tab-professions" hidden>
+    <div>
+      <h2>Situation par profession</h2>
+      <p class="sub">Filtres zone, aire et période appliqués. Triée par nombre de cas.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th class="first">Profession</th><th class="n">Alertes</th><th class="n">Cas</th><th class="n">Confirmés</th><th class="n">Décès</th>
+            <th class="n">Létalité</th><th class="n">% des cas</th><th class="n">Cas 7 j</th><th class="n">Alertes 7 j</th><th>Dernier confirmé</th><th class="n">Jours depuis</th>
+          </tr></thead>
+          <tbody id="tb-prof"></tbody>
+        </table>
+      </div>
+      <p class="chart-note">Source : variable DHIS2 « MVE-N-Profession ». Les fiches sans profession sont regroupées sous « Non renseignée ».</p>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs" role="tablist" hidden>
+  <button role="tab" data-tab="synthese" aria-selected="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>Synthèse</button>
+  <button role="tab" data-tab="courbes" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M9 20V6M14 20v-8M19 20V3"/></svg>Courbes</button>
+  <button role="tab" data-tab="carte" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20z"/><path d="M9 4v13.5M15 6.5V20"/></svg>Carte</button>
+  <button role="tab" data-tab="tendance" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5.5-5.5 4 4L21 7"/><path d="M15 7h6v6"/></svg>Tendance</button>
+  <button role="tab" data-tab="zones" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M3.5 9.5h17M3.5 14.8h17M9.5 9.5V20"/></svg>Zones</button>
+  <button role="tab" data-tab="professions" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17.5" cy="9" r="2.4"/><path d="M16 15c2.6 0 4.4 1.4 5 4"/></svg>Professions</button>
+</nav>
+
+<input type="file" id="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+
+<div class="sheet-bg" id="sheet-bg" hidden></div>
+
+<div class="sheet" id="sheet-filtres" role="dialog" aria-modal="true" aria-labelledby="t-filtres" hidden>
+  <div class="grab"></div>
+  <h3 id="t-filtres">Filtres</h3>
+  <div class="field"><label for="f-zone">Zone de santé</label><select id="f-zone"></select></div>
+  <div class="field"><label for="f-aire">Aire de santé</label><select id="f-aire"></select></div>
+  <div class="row2">
+    <div class="field"><label for="f-debut">Notifiés du</label><input type="date" id="f-debut"></div>
+    <div class="field"><label for="f-fin">au</label><input type="date" id="f-fin"></div>
+  </div>
+  <div class="quick" id="q-periode">
+    <button data-p="tout">Toute l'épidémie</button><button data-p="28">28 derniers jours</button><button data-p="7">7 derniers jours</button>
+  </div>
+  <div class="field"><label for="f-ref">Date de référence (jour, 7 j, jours depuis)</label><input type="date" id="f-ref"></div>
+  <div class="quick" id="q-ref">
+    <button data-r="0">Aujourd'hui</button><button data-r="1">Hier</button><button data-r="data">Dernière notification</button>
+  </div>
+  <div class="stack">
+    <button class="btn" id="btn-apply">Appliquer</button>
+    <button class="btn ghost" id="btn-reset">Réinitialiser</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-menu" role="dialog" aria-modal="true" aria-labelledby="t-menu" hidden>
+  <div class="grab"></div>
+  <h3 id="t-menu">Données</h3>
+  <p class="sub" id="menu-info"></p>
+  <div class="stack">
+    <button class="btn" id="btn-sync-menu" hidden>Actualiser maintenant</button>
+    <button class="btn ghost" id="btn-auto">Activer la mise à jour automatique</button>
+    <button class="btn ghost" id="btn-open">Ouvrir un fichier Excel</button>
+    <button class="btn ghost" id="btn-install" hidden>Installer l'application sur ce téléphone</button>
+    <button class="btn ghost" id="btn-help">Aide et installation</button>
+    <a class="btn ghost" href="qualite/">Ouvrir « Qualité des données »</a>
+    <a class="btn ghost" href="vaccination/">Ouvrir « Vaccination MVE »</a>
+    <a class="btn ghost" href="contacts/">Ouvrir « Contacts MVE »</a>
+    <a class="btn ghost" href="qualite-contacts/">Ouvrir « Qualité Contacts MVE »</a>
+    <a class="btn ghost" href="chaines/">Ouvrir « Chaînes de transmission »</a>
+    <button class="btn ghost" id="btn-auto-off" hidden>Désactiver la mise à jour automatique</button>
+    <button class="btn danger" id="btn-clear">Effacer les données de ce téléphone</button>
+  </div>
+</div>
+
+<div class="sheet def" id="sheet-def" role="dialog" aria-modal="true" aria-labelledby="t-def" hidden>
+  <div class="grab"></div>
+  <h3 id="t-def"></h3>
+  <div class="big" id="def-val"></div>
+  <div class="k">Définition</div><p id="def-def"></p>
+  <div class="k">Lecture</div><p id="def-int"></p>
+  <div class="k">Filtres appliqués</div><p id="def-fil"></p>
+  <button class="btn ghost" data-close>Fermer</button>
+</div>
+
+<div class="sheet help" id="sheet-help" role="dialog" aria-modal="true" aria-labelledby="t-help" hidden>
+  <div class="grab"></div>
+  <h3 id="t-help">Aide</h3>
+  <h4>Mise à jour automatique</h4>
+  <ol>
+    <li>Une seule fois : menu <b>⋮ › Activer la mise à jour automatique</b>, puis saisissez le mot de passe d'équipe donné par le gestionnaire des données.</li>
+    <li>Ensuite, à chaque ouverture (avec Internet), l'application récupère les dernières données publiées depuis l'ordinateur. Le bouton <b>⟳</b> en haut force la vérification.</li>
+    <li>Sans Internet, les dernières données reçues restent affichées. Si l'en-tête devient jaune, les données ont plus de 2 jours.</li>
+  </ol>
+  <h4>Sans Internet ni mot de passe</h4>
+  <ol>
+    <li>Recevez le classeur .xlsx (WhatsApp, câble…) puis <b>⋮ › Ouvrir un fichier Excel</b>, ou <b>Partager › Suivi MVE</b>.</li>
+  </ol>
+  <h4>Installer l'application</h4>
+  <ol>
+    <li>Ouvrez l'adresse de l'application dans <b>Chrome</b> sur Android.</li>
+    <li>Menu <b>⋮ › Installer l'application</b> (ou « Ajouter à l'écran d'accueil »).</li>
+    <li>L'icône « Suivi MVE » apparaît avec les autres applications. Elle fonctionne ensuite sans connexion.</li>
+  </ol>
+  <h4>Confidentialité</h4>
+  <p class="sub" style="margin:0 0 12px">Les données publiées sont chiffrées ; le mot de passe d'équipe ne doit pas être partagé hors de l'équipe. Effacez les données depuis le menu avant de prêter ou de changer de téléphone.</p>
+  <button class="btn ghost" data-close>Fermer</button>
+</div>
+
+<div class="sheet" id="sheet-pass" role="dialog" aria-modal="true" aria-labelledby="t-pass" hidden>
+  <div class="grab"></div>
+  <h3 id="t-pass">Mise à jour automatique</h3>
+  <p class="sub">Saisissez le mot de passe d'équipe. Il n'est demandé qu'une fois sur ce téléphone.</p>
+  <form id="form-pw" autocomplete="off">
+    <div class="field"><label for="pw">Mot de passe d'équipe</label><input type="password" id="pw" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <label class="check"><input type="checkbox" id="pw-show"> Afficher le mot de passe</label>
+    <p class="pw-msg" id="pw-msg" role="alert"></p>
+    <div class="stack">
+      <button class="btn" id="btn-pw" type="submit">Activer</button>
+      <button class="btn ghost" type="button" data-close>Annuler</button>
+    </div>
+  </form>
+</div>
+
+<div class="busy" id="busy" hidden><div>Lecture du fichier…</div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="admin-config.js"></script>
+<script src="admin.js"></script>
+<script src="xlsx.mini.min.js"></script>
+<script src="engine.js"></script>
+<script src="carte.js"></script>
+<script src="tendance.js"></script>
+<script src="app.js"></script>
+<script src="bureau.js" data-classeur="suivi"></script>
+</body>
+</html>

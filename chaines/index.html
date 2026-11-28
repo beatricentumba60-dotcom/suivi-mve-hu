@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chaînes de transmission MVE</title>
+<meta name="description" content="Chaînes de transmission MVE : cas sources, contacts et cas secondaires, calculées sur l’ordinateur.">
+<meta name="theme-color" content="#4f1d2c">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icone-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  /* Mise en page : en-tête fixe (données + filtres), contenu par onglets, barre d'onglets en bas (usage au pouce). */
+  :root {
+    --ink: #4f1d2c;          /* bordeaux : chaînes de transmission */
+    --accent: #e07b24;
+    --line-2: #c9d3dc;
+    --ink-2: #9b3550;
+    --bg: #f3f5f7;
+    --panel: #ffffff;
+    --line: #dde3e9;
+    --fg: #16212b;
+    --muted: #5d6b78;
+    --conf: #c8312d;         /* cas confirmés */
+    --prob: #e3a12f;         /* cas probables */
+    --dec: #3b4148;          /* décès */
+    --alert: #a9bccd;        /* alertes */
+    --men: #2f6f9f;
+    --women: #c0587e;
+    --ok: #23804f;
+    --warn: #b97700;
+    --bad: #c8312d;
+    --ok-bg: #e3f3ea;
+    --warn-bg: #fdf1d8;
+    --bad-bg: #fbe5e4;
+    --c0: #eef1f4; --c1: #fbe3d6; --c2: #f4b393; --c3: #e3744f; --c4: #b8322a;
+    --radius: 12px;
+    --font: Roboto, "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --num: "Roboto Condensed", Roboto, "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1820; --panel: #17232e; --line: #26364430; --fg: #e7edf2; --muted: #9aabb9;
+      --dec: #cfd6dc; --alert: #4d6478; --line: #2a3a48;
+      --ok-bg: #173a29; --warn-bg: #3d2f12; --bad-bg: #44201f; --ok: #5cc48d; --warn: #f0b84a; --bad: #ff7a72;
+      --c0: #22313d; --c1: #4a2f28; --c2: #7a3d2b; --c3: #b24f33; --c4: #e0533f;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 15px; line-height: 1.4;
+    -webkit-tap-highlight-color: transparent; }
+  button, input, select { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+
+  .top { position: sticky; top: 0; z-index: 20; background: var(--ink); color: #fff;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); }
+  .top-row { display: flex; align-items: center; gap: 10px; }
+  .top h1 { font-size: 17px; font-weight: 600; margin: 0; flex: 1; min-width: 0; letter-spacing: .01em; }
+  .top .src { font-size: 12px; opacity: .78; margin: 2px 0 0; }
+  .top .src.stale { opacity: 1; color: #ffd27a; }
+  .top .src.stale::after { content: " · données de plus de 2 jours"; }
+  .icon-btn.spin svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pw-msg { min-height: 1.4em; font-size: 13px; color: var(--bad); margin: -4px 0 10px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: -4px 0 14px; color: var(--muted); }
+  .icon-btn { background: transparent; border: 0; color: #fff; width: 40px; height: 40px; border-radius: 20px; display: grid; place-items: center; cursor: pointer; }
+  .icon-btn:active { background: rgba(255,255,255,.12); }
+  .chips { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; border: 1px solid rgba(255,255,255,.28); background: rgba(255,255,255,.08); color: #fff; border-radius: 16px;
+    padding: 5px 11px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+  .chip b { font-weight: 600; }
+
+  main { padding: 14px max(16px, env(safe-area-inset-right, 0px)) calc(84px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    max-width: 980px; margin: 0 auto; }
+  .tab { display: flex; flex-direction: column; gap: 18px; }
+  h2 { font-size: 16px; font-weight: 600; margin: 0 0 8px; }
+  .sub { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px; }
+  .lede { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0; line-height: 1.5; }
+  .lede b { font-variant-numeric: tabular-nums; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; text-align: left;
+    cursor: pointer; display: flex; flex-direction: column; gap: 2px; min-width: 0; position: relative; }
+  .tile:active { transform: scale(.985); }
+  .tile .lab { font-size: 12.5px; color: var(--muted); line-height: 1.25; }
+  .tile .val { font-family: var(--num); font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .tile .note { font-size: 11.5px; color: var(--muted); }
+  .tile.hero { grid-column: span 2; background: var(--ink); color: #fff; border-color: var(--ink); }
+  .tile.hero .lab, .tile.hero .note { color: rgba(255,255,255,.78); }
+  .tile.hero .val { font-size: 38px; }
+  .tile .tag { position: absolute; top: 10px; right: 10px; width: 8px; height: 8px; border-radius: 4px; }
+  .tile.s-bad { background: var(--bad-bg); border-color: transparent; } .tile.s-bad .val { color: var(--bad); }
+  .tile.s-warn { background: var(--warn-bg); border-color: transparent; } .tile.s-warn .val { color: var(--warn); }
+  .tile.s-ok { background: var(--ok-bg); border-color: transparent; } .tile.s-ok .val { color: var(--ok); }
+  .tile.k-conf .tag { background: var(--conf); } .tile.k-prob .tag { background: var(--prob); } .tile.k-dec .tag { background: var(--dec); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; min-width: 0; }
+  .chart { position: relative; width: 100%; }
+  .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { fill: var(--muted); font-size: 11px; font-family: var(--font); }
+  .chart .vlab { fill: var(--fg); font-variant-numeric: tabular-nums; }
+  .chart .grid line { stroke: var(--line); }
+  .chart .axis line, .chart .axis path { stroke: var(--line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .tip { position: absolute; z-index: 5; pointer-events: none; background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    box-shadow: 0 6px 18px rgba(0,0,0,.16); border-radius: 8px; padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+  .tip b { display: block; margin-bottom: 2px; }
+  .chart-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; font-size: 12px; color: var(--muted); background: var(--panel); padding: 8px 10px; border-bottom: 1px solid var(--line);
+    white-space: nowrap; position: sticky; top: 0; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  td.first, th.first { position: sticky; left: 0; background: var(--panel); z-index: 1; }
+  tr.active td { background: var(--bad-bg); } tr.active td.first { background: var(--bad-bg); }
+  tr.total td { font-weight: 600; background: var(--bg); } tr.total td.first { background: var(--bg); }
+  .pill { display: inline-block; min-width: 34px; text-align: center; border-radius: 10px; padding: 1px 7px; font-size: 12px; font-weight: 600; }
+  .pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.warn { background: var(--warn-bg); color: var(--warn); } .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid rgba(0,0,0,.08); }
+  .cls0 { background: var(--c0); } .cls1 { background: var(--c1); } .cls2 { background: var(--c2); } .cls3 { background: var(--c3); } .cls4 { background: var(--c4); }
+  .classes { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; margin-top: 10px; font-size: 12.5px; }
+  .classes div { display: flex; align-items: center; gap: 4px; }
+
+  .tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--panel); border-top: 1px solid var(--line);
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    padding: 4px max(8px, env(safe-area-inset-right, 0px)) calc(4px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px)); }
+  .tabs button { background: none; border: 0; padding: 6px 2px 4px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    font-size: 11.5px; color: var(--muted); cursor: pointer; border-radius: 10px; }
+  .tabs button svg { width: 22px; height: 22px; }
+  .tabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .tabs button[aria-selected="true"] { color: #f2a7bb; } }
+
+  .sheet-bg { position: fixed; inset: 0; background: rgba(8,16,24,.45); z-index: 40; }
+  .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 41; background: var(--panel); border-radius: 16px 16px 0 0;
+    padding: 8px max(18px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+    max-height: 88vh; overflow-y: auto; max-width: 640px; margin: 0 auto; box-shadow: 0 -8px 30px rgba(0,0,0,.2); }
+  .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 12px; }
+  .sheet h3 { margin: 0 0 12px; font-size: 17px; }
+  .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .field label { font-size: 12.5px; color: var(--muted); }
+  .field select, .field input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); min-height: 44px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .quick { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 12px; }
+  .quick button { border: 1px solid var(--line); background: var(--bg); border-radius: 16px; padding: 5px 11px; font-size: 13px; cursor: pointer; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 46px; padding: 0 18px; border-radius: 12px; border: 0;
+    background: var(--ink); color: #fff; font-weight: 600; cursor: pointer; width: 100%; }
+  @media (prefers-color-scheme: dark) { .btn { background: #9b3550; } }
+  a.btn { text-decoration: none; }
+  .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
+  .btn.danger { background: transparent; color: var(--bad); border: 1px solid var(--line); }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+  .warn-line { font-size: 12.5px; color: var(--warn); margin: -6px 0 10px; }
+  .def p { margin: 0 0 10px; line-height: 1.5; } .def .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+  .def .big { font-family: var(--num); font-size: 30px; font-weight: 600; margin-bottom: 10px; }
+
+  .empty { max-width: 520px; margin: 8vh auto 0; text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+  .empty img { width: 84px; height: 84px; border-radius: 20px; }
+  .empty h2 { font-size: 20px; margin: 0; }
+  .empty p { margin: 0; color: var(--muted); line-height: 1.5; }
+  .empty .priv { font-size: 12.5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; text-align: left; }
+  .busy { position: fixed; inset: 0; z-index: 60; background: rgba(8,16,24,.55); display: grid; place-items: center; color: #fff; font-weight: 600; }
+  .busy div { background: var(--ink); padding: 16px 20px; border-radius: 12px; }
+  .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(80px + env(safe-area-inset-bottom, 0px)); z-index: 50;
+    background: #1b2731; color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 13.5px; max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+  .help ol { padding-left: 20px; margin: 6px 0 12px; } .help li { margin-bottom: 6px; line-height: 1.45; }
+  .help h4 { margin: 14px 0 4px; font-size: 14px; }
+  @media (min-width: 720px) { .tile.hero { grid-column: span 2; } main { padding-top: 20px; } }
+  @media (prefers-reduced-motion: no-preference) { .sheet { animation: up .18s ease-out; } @keyframes up { from { transform: translateY(24px); opacity: .6; } } }
+  :focus-visible { outline: 3px solid #5aa9e6; outline-offset: 2px; }
+</style>
+<style>
+  /* Compléments Chaînes */
+  .schema { overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); max-height: 70vh; }
+  .schema svg { display: block; }
+  .schema .nd { cursor: pointer; } .schema .nd:focus { outline: none; } .schema .nd.sel rect { stroke-width: 3; }
+  .schema text { font-size: 12px; fill: var(--fg); } .schema text.b { font-weight: 700; } .schema text.m { fill: var(--muted); font-size: 11px; }
+  .legend i.ligne { width: 18px; height: 0; border-top: 2px solid var(--fg); border-radius: 0; vertical-align: 3px; background: none; } .legend i.ligne.tir { border-top-style: dashed; }
+  .detail { margin-top: 10px; font-size: 13.5px; background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+  .detail b { font-weight: 600; }
+  .item.click { cursor: pointer; } .item.click:hover { border-color: var(--ink-2); }
+  .tag-fort { background: var(--ok-bg) !important; color: var(--ok); border-color: transparent !important; } .tag-prob { background: var(--warn-bg) !important; color: var(--warn); border-color: transparent !important; }
+  #q-gen button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  /* Compléments Qualité / Vaccination / Contacts */
+  .item .nb.cat-0 { color: var(--bad); background: var(--bad-bg); } .item .nb.cat-1 { color: var(--warn); background: var(--warn-bg); } .item .nb.cat-2 { color: var(--muted); background: var(--bg); }
+  #q-cat button[aria-pressed="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+  @media (prefers-color-scheme: dark) { :root { --line-2: #4a5866; } }
+  .tile.h-good { background: var(--ok); border-color: var(--ok); } .tile.h-mid { background: var(--warn); border-color: var(--warn); } .tile.h-bad { background: var(--bad); border-color: var(--bad); }
+  tr.actif td { background: #e5eefa; } tr.actif td.first { background: #e5eefa; }
+  @media (prefers-color-scheme: dark) { tr.actif td, tr.actif td.first { background: #1d3550; } }
+  tr.grp td { font-weight: 600; font-size: 12px; color: var(--muted); background: var(--bg); text-transform: uppercase; letter-spacing: .04em; }
+  td.wrap { white-space: normal; min-width: 180px; } td.act { font-size: 12px; color: var(--muted); min-width: 200px; }
+  .tabs button { font-size: 10.5px; }
+  .tile.q-good .val { color: var(--ok); } .tile.q-mid .val { color: var(--warn); } .tile.q-bad .val { color: var(--bad); }
+  .tile.q-good { background: var(--ok-bg); border-color: transparent; } .tile.q-mid { background: var(--warn-bg); border-color: transparent; } .tile.q-bad { background: var(--bad-bg); border-color: transparent; }
+  td .pct { display: inline-block; min-width: 46px; text-align: right; border-radius: 8px; padding: 1px 6px; font-weight: 600; font-size: 12.5px; }
+  td .pct.good { background: var(--ok-bg); color: var(--ok); } td .pct.mid { background: var(--warn-bg); color: var(--warn); } td .pct.bad { background: var(--bad-bg); color: var(--bad); }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .item { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .item .top-line { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .item .idn { font-family: var(--num); font-weight: 600; font-size: 14px; word-break: break-all; }
+  .item .meta { font-size: 12.5px; color: var(--muted); }
+  .item .nb { flex: none; font-size: 12px; font-weight: 600; color: var(--bad); background: var(--bad-bg); border-radius: 10px; padding: 1px 8px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+  .tags span { font-size: 11.5px; border-radius: 6px; padding: 2px 6px; background: var(--bg); border: 1px solid var(--line); }
+  .tags span.inc { border-color: transparent; background: var(--warn-bg); color: var(--warn); }
+  .group { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .group h3 { margin: 0; font-size: 13px; font-weight: 600; padding: 8px 12px; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; }
+  .group .mem { padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+  .group .mem:last-child { border-bottom: 0; }
+  .search { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); min-height: 44px; }
+  .more { margin-top: 4px; }
+  .switch { display: inline-flex; gap: 4px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 3px; margin-bottom: 8px; }
+  .switch button { border: 0; background: transparent; border-radius: 8px; padding: 5px 10px; font-size: 12.5px; cursor: pointer; color: var(--muted); }
+  .switch button[aria-pressed="true"] { background: var(--panel); color: var(--fg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-row">
+    <h1>Chaînes de transmission MVE</h1>
+    <button class="icon-btn" id="btn-sync" aria-label="Recharger les classeurs maintenant" title="Recharger les classeurs maintenant" hidden>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/></svg>
+    </button>
+    <button class="icon-btn" id="btn-menu" aria-label="Menu">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/></svg>
+    </button>
+  </div>
+  <p class="src" id="src">Aucune donnée chargée</p>
+  <div class="chips" id="chips" hidden></div>
+</header>
+
+<main>
+  <section class="empty" id="empty">
+    <img src="icone-192.png" alt="">
+    <h2>Chaînes de transmission</h2>
+    <p id="empty-msg">Ce tableau de bord relie les cas à leurs contacts, puis les contacts devenus cas à leur propre alerte. Saisissez le mot de passe d’équipe pour recevoir les chaînes publiées depuis DHIS2, ou ouvrez les deux classeurs « Qualité des données MVE » et « Contacts MVE ».</p>
+    <button class="btn" id="btn-auto-empty" style="max-width:320px">Activer la mise à jour automatique</button>
+    <button class="btn ghost" id="btn-open-empty" style="max-width:320px">Ouvrir les deux classeurs Excel</button>
+    <p class="priv"><b>Confidentialité :</b> aucun nom n’est affiché ni gardé. Sur le téléphone, les liens arrivent déjà calculés, sans aucun nom. Sur l’ordinateur, les noms des classeurs servent uniquement au rapprochement, en mémoire. Seuls les N° Epid et les ID contact apparaissent.</p>
+  </section>
+
+  <section class="tab" id="tab-synthese" hidden>
+    <p class="lede" id="lede"></p>
+    <div><h2>Chaînes</h2><div class="grid" id="tiles-ch"></div></div>
+    <div><h2>Cas et contacts</h2><p class="sub" id="sub-cas"></p><div class="grid" id="tiles-cas"></div></div>
+    <div><h2>Liens entre cas</h2><div class="grid" id="tiles-liens"></div></div>
+    <div><h2>Chaînes les plus longues</h2><div class="list" id="list-top"></div></div>
+    <p class="chart-note">Lien <b>saisi</b> : N° Epid du cas source sur la fiche contact. Lien <b>fort</b> : contact retrouvé dans les alertes avec un nom identique (ou un contact noté « devenu confirmé / suspect »), même sexe, âge et dates compatibles. Lien <b>probable</b> : 2 mots du nom sur 3 en commun, même zone : à confirmer par l'équipe (onglet « À valider »).</p>
+  </section>
+
+  <section class="tab" id="tab-chaines" hidden>
+    <div class="card" id="schema-card">
+      <h2 id="schema-titre">Schéma</h2>
+      <p class="sub" id="schema-sub"></p>
+      <div class="schema" id="schema"></div>
+      <div class="legend"><span><i style="background:var(--bad)"></i>Cas confirmé</span><span><i style="background:var(--warn)"></i>Cas probable</span><span><i style="background:var(--muted)"></i>Autre / hors liste</span><span><i class="ligne"></i>Lien fort</span><span><i class="ligne tir"></i>Lien probable</span><span>✝ décédé</span></div>
+      <div class="detail" id="detail" hidden></div>
+    </div>
+    <div>
+      <h2>Toutes les chaînes</h2>
+      <div class="quick" id="q-gen"><button data-g="2">2 générations et plus</button><button data-g="1">Toutes</button></div>
+      <input class="search" id="q-chaines" type="search" placeholder="Rechercher un N° Epid (ex. ISI-0029819) ou une zone" aria-label="Rechercher une chaîne">
+    </div>
+    <div class="list" id="list-chaines"></div>
+    <button class="btn ghost more" id="more-chaines" hidden>Afficher plus</button>
+  </section>
+
+  <section class="tab" id="tab-valider" hidden>
+    <div>
+      <h2>Liens entre cas à valider</h2>
+      <p class="sub" id="sub-valider"></p>
+    </div>
+    <div class="list" id="list-valider"></div>
+  </section>
+
+  <section class="tab" id="tab-lacunes" hidden>
+    <div>
+      <h2>Contacts devenus confirmés sans alerte retrouvée</h2>
+      <p class="sub" id="sub-l1"></p>
+      <div class="list" id="list-l1"></div>
+    </div>
+    <div>
+      <h2>N° Epid de cas source introuvables dans les alertes</h2>
+      <p class="sub" id="sub-l2"></p>
+      <div class="list" id="list-l2"></div>
+    </div>
+    <div>
+      <h2>Cas confirmés ou probables sans aucun contact listé</h2>
+      <p class="sub" id="sub-l3"></p>
+      <input class="search" id="q-l3" type="search" placeholder="Rechercher un N° Epid ou une zone" aria-label="Rechercher un cas sans contact">
+      <div class="list" id="list-l3" style="margin-top:8px"></div>
+      <button class="btn ghost more" id="more-l3" hidden>Afficher plus</button>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs" id="tabs" role="tablist" hidden>
+  <button role="tab" data-tab="synthese" aria-selected="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>Synthèse</button>
+  <button role="tab" data-tab="chaines" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M7.3 11l8.4-4M7.3 13l8.4 4"/></svg>Chaînes</button>
+  <button role="tab" data-tab="valider" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>À valider</button>
+  <button role="tab" data-tab="lacunes" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/></svg>Lacunes</button>
+</nav>
+
+<input type="file" id="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple hidden>
+<div class="sheet-bg" id="sheet-bg" hidden></div>
+
+<div class="sheet" id="sheet-filtres" role="dialog" aria-modal="true" aria-labelledby="t-filtres" hidden>
+  <div class="grab"></div>
+  <h3 id="t-filtres">Filtres</h3>
+  <div class="field"><label for="f-zone">Zone de santé (au moins un cas de la chaîne)</label><select id="f-zone"></select></div>
+  <div class="row2">
+    <div class="field"><label for="f-debut">Chaîne commencée du</label><input type="date" id="f-debut"></div>
+    <div class="field"><label for="f-fin">au</label><input type="date" id="f-fin"></div>
+  </div>
+  <div class="stack">
+    <button class="btn" id="btn-apply">Appliquer</button>
+    <button class="btn ghost" id="btn-reset">Toute l'épidémie</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-menu" role="dialog" aria-modal="true" aria-labelledby="t-menu" hidden>
+  <div class="grab"></div>
+  <h3 id="t-menu">Données</h3>
+  <p class="sub" id="menu-info"></p>
+  <div class="stack">
+    <a class="btn" href="/accueil/" id="lien-accueil" hidden>Accueil : les tableaux de bord</a>
+    <button class="btn ghost" id="btn-sync-menu" hidden>Recharger les classeurs maintenant</button>
+    <button class="btn ghost" id="btn-auto">Activer la mise à jour automatique</button>
+    <button class="btn ghost" id="btn-open">Ouvrir les deux classeurs Excel</button>
+    <button class="btn ghost" id="btn-install" hidden>Installer l'application sur ce téléphone</button>
+    <a class="btn ghost" href="../">Ouvrir « Suivi MVE »</a>
+    <a class="btn ghost" href="../qualite/">Ouvrir « Qualité MVE »</a>
+    <a class="btn ghost" href="../vaccination/">Ouvrir « Vaccination MVE »</a>
+    <a class="btn ghost" href="../contacts/">Ouvrir « Contacts MVE »</a>
+    <a class="btn ghost" href="../qualite-contacts/">Ouvrir « Qualité Contacts MVE »</a>
+    <button class="btn ghost" id="btn-auto-off" hidden>Désactiver la mise à jour automatique</button>
+  </div>
+</div>
+
+<div class="sheet def" id="sheet-def" role="dialog" aria-modal="true" aria-labelledby="t-def" hidden>
+  <div class="grab"></div>
+  <h3 id="t-def"></h3>
+  <div class="big" id="def-val"></div>
+  <div class="k">Définition</div><p id="def-def"></p>
+  <div class="k">Lecture</div><p id="def-int"></p>
+  <button class="btn ghost" data-close>Fermer</button>
+</div>
+
+<div class="sheet" id="sheet-pass" role="dialog" aria-modal="true" aria-labelledby="t-pass" hidden>
+  <div class="grab"></div>
+  <h3 id="t-pass">Mise à jour automatique</h3>
+  <p class="sub">Saisissez le mot de passe d'équipe. Il n'est demandé qu'une fois sur ce téléphone.</p>
+  <form id="form-pw" autocomplete="off">
+    <div class="field"><label for="pw">Mot de passe d'équipe</label><input type="password" id="pw" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <label class="check"><input type="checkbox" id="pw-show"> Afficher le mot de passe</label>
+    <p class="pw-msg" id="pw-msg" role="alert"></p>
+    <div class="stack">
+      <button class="btn" id="btn-pw" type="submit">Activer</button>
+      <button class="btn ghost" type="button" data-close>Annuler</button>
+    </div>
+  </form>
+</div>
+
+<div class="busy" id="busy" hidden><div>Lecture des classeurs…</div></div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="../admin-config.js"></script>
+<script src="../admin.js"></script>
+<script src="../xlsx.mini.min.js"></script>
+<script src="engine-chaines.js"></script>
+<script src="app-chaines.js"></script>
+</body>
+</html>
